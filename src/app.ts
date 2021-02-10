@@ -4,7 +4,8 @@ import {
   FastifyReply,
   DoneFuncWithErrOrRes,
 } from 'fastify';
-import fastifyAuth from 'fastify-auth';
+import {default as fastifyAuth, skipAuthError} from 'fastify-auth';
+import fastifyJwt from 'fastify-jwt';
 import bearerAuthPlugin from 'fastify-bearer-auth';
 
 export async function createApp() {
@@ -13,6 +14,9 @@ export async function createApp() {
   });
 
   await app.register(fastifyAuth);
+  app.register(fastifyJwt, {
+    secret: 'supersecret',
+  });
 
   await app.decorate(
     'allowAnonymous',
@@ -25,23 +29,27 @@ export async function createApp() {
         return done();
       }
 
-      return done(new Error('not anonymous'));
+      return done(skipAuthError);
     }
   );
 
   await app.decorate(
     'allowBearerAuth',
-    function (
+    async function (
       request: FastifyRequest,
       _reply: FastifyReply,
       done: DoneFuncWithErrOrRes
     ) {
       if (request.headers.authorization) {
-        // TODO: how to invoke fastify-bearer-auth here
-        return done();
+        try {
+          await request.jwtVerify();
+          return done();
+        } catch (ex) {
+          return done(ex);
+        }
       }
 
-      return done(new Error('anonymous'));
+      return done(skipAuthError);
     }
   );
 
